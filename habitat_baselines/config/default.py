@@ -74,6 +74,28 @@ _C.RL.PPO.tau = 0.95
 _C.RL.PPO.reward_window_size = 50
 _C.RL.PPO.use_normalized_advantage = True
 _C.RL.PPO.hidden_size = 512
+#-----------------------------------------------------------------------------
+# SOFT ACTOR CRITIC
+#-----------------------------------------------------------------------------
+_C.RL.SAC = CN()
+_C.RL.SAC.clip_param = 0.2
+_C.RL.SAC.ppo_epoch = 4
+_C.RL.SAC.num_mini_batch = 16
+_C.RL.SAC.value_loss_coef = 0.5
+_C.RL.SAC.entropy_coef = 0.01
+_C.RL.SAC.lr = 7e-4
+_C.RL.SAC.eps = 1e-5
+_C.RL.SAC.max_grad_norm = 0.5
+_C.RL.SAC.num_steps = 5
+_C.RL.SAC.use_gae = True
+_C.RL.SAC.use_linear_lr_decay = False
+_C.RL.SAC.use_linear_clip_decay = False
+_C.RL.SAC.gamma = 0.99
+_C.RL.SAC.tau = 0.95
+_C.RL.SAC.reward_window_size = 50
+_C.RL.SAC.use_normalized_advantage = True
+_C.RL.SAC.hidden_size = 512
+
 # -----------------------------------------------------------------------------
 # DECENTRALIZED DISTRIBUTED PROXIMAL POLICY OPTIMIZATION (DD-PPO)
 # -----------------------------------------------------------------------------
