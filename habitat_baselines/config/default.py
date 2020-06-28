@@ -181,4 +181,5 @@ def get_config(
         config.merge_from_list(config.CMD_TRAILING_OPTS)
 
     config.freeze()
+    print (config)
     return config

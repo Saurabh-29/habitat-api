@@ -6,5 +6,6 @@
 
 from habitat_baselines.rl.sac.policy import Net, PointNavBaselinePolicy, Policy
 from habitat_baselines.rl.sac.sac import SAC
+from habitat_baselines.rl.sac.sac_trainer import SACTrainer
 
 __all__ = ["SAC", "Policy", "RolloutStorage", "Net", "PointNavBaselinePolicy"]
