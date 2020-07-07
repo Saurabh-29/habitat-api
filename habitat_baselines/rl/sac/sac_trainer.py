@@ -28,12 +28,12 @@ from habitat_baselines.common.utils import (
     linear_decay,
 )
 from habitat_baselines.rl.sac import SAC, PointNavBaselinePolicy
-
+import pdb
 
 @baseline_registry.register_trainer(name="sac")
 class SACTrainer(BaseRLTrainer):
-    r"""Trainer class for PPO algorithm
-    Paper: https://arxiv.org/abs/1707.06347.
+    r"""Trainer class for Discrete-SAC algorithm
+    Paper: https://arxiv.org/pdf/1910.07207.pdf
     """
     supported_tasks = ["Nav-v0"]
 
@@ -48,11 +48,11 @@ class SACTrainer(BaseRLTrainer):
         self._static_encoder = False
         self._encoder = None
 
-    def _setup_actor_critic_agent(self, ppo_cfg: Config) -> None:
-        r"""Sets up actor critic and agent for PPO.
+    def _setup_actor_critic_agent(self, sac_cfg: Config) -> None:
+        r"""Sets up actor critic and agent for SAC.
 
         Args:
-            ppo_cfg: config node with relevant params
+            sac_cfg: config node with relevant params
 
         Returns:
             None
@@ -62,22 +62,26 @@ class SACTrainer(BaseRLTrainer):
         self.actor_critic = PointNavBaselinePolicy(
             observation_space=self.envs.observation_spaces[0],
             action_space=self.envs.action_spaces[0],
-            hidden_size=ppo_cfg.hidden_size,
+            hidden_size=sac_cfg.hidden_size,
         )
         self.actor_critic.to(self.device)
 
         self.agent = SAC(
             actor_critic=self.actor_critic,
-            clip_param=ppo_cfg.clip_param,
-            ppo_epoch=ppo_cfg.ppo_epoch,
-            num_mini_batch=ppo_cfg.num_mini_batch,
-            value_loss_coef=ppo_cfg.value_loss_coef,
-            entropy_coef=ppo_cfg.entropy_coef,
-            lr=ppo_cfg.lr,
-            eps=ppo_cfg.eps,
-            max_grad_norm=ppo_cfg.max_grad_norm,
-            use_normalized_advantage=ppo_cfg.use_normalized_advantage,
+            clip_param=sac_cfg.clip_param,
+            sac_epoch=sac_cfg.sac_epoch,
+            num_mini_batch=sac_cfg.num_mini_batch,
+            value_loss_coef=sac_cfg.value_loss_coef,
+            entropy_coef=sac_cfg.entropy_coef,
+            dim_actions = self.envs.action_spaces[0].n,
+            lr=sac_cfg.lr,
+            eps=sac_cfg.eps,
+            max_grad_norm=sac_cfg.max_grad_norm,
+            use_normalized_advantage=sac_cfg.use_normalized_advantage,
+            alpha = None,
+            gamma = sac_cfg.gamma,
         )
+        self.agent.to(self.device)
 
     def save_checkpoint(
         self, file_name: str, extra_state: Optional[Dict] = None
@@ -178,6 +182,7 @@ class SACTrainer(BaseRLTrainer):
                 rollouts.prev_actions[rollouts.step],
                 rollouts.masks[rollouts.step],
             )
+            #print("the value of value in rollout", values, rollouts.value_preds[rollouts.step], rollouts.value_preds[rollouts.step-1], rollouts.step)
 
         pth_time += time.time() - t_sample_action
 
@@ -235,7 +240,7 @@ class SACTrainer(BaseRLTrainer):
 
         return pth_time, env_time, self.envs.num_envs
 
-    def _update_agent(self, ppo_cfg, rollouts):
+    def _update_agent(self, sac_cfg, rollouts):
         t_update_model = time.time()
         with torch.no_grad():
             last_observation = {
@@ -247,9 +252,9 @@ class SACTrainer(BaseRLTrainer):
                 rollouts.prev_actions[rollouts.step],
                 rollouts.masks[rollouts.step],
             ).detach()
-
+        #print("the value of next value what the huck bro", next_value, rollouts.value_preds[rollouts.step], rollouts.value_preds[rollouts.step-1], rollouts.step)
         rollouts.compute_returns(
-            next_value, ppo_cfg.use_gae, ppo_cfg.gamma, ppo_cfg.tau
+            next_value, sac_cfg.use_gae, sac_cfg.gamma, sac_cfg.tau
         )
 
         value_loss, action_loss, dist_entropy = self.agent.update(rollouts)
@@ -262,19 +267,20 @@ class SACTrainer(BaseRLTrainer):
             action_loss,
             dist_entropy,
         )
-
+    #pdb.set_trace()
     def train(self) -> None:
-        r"""Main method for training PPO.
+        r"""Main method for training SAC.
 
         Returns:
             None
         """
 
+        #pdb.set_trace()
         self.envs = construct_envs(
             self.config, get_env_class(self.config.ENV_NAME)
         )
 
-        ppo_cfg = self.config.RL.SAC
+        sac_cfg = self.config.RL.SAC
         self.device = (
             torch.device("cuda", self.config.TORCH_GPU_ID)
             if torch.cuda.is_available()
@@ -282,7 +288,7 @@ class SACTrainer(BaseRLTrainer):
         )
         if not os.path.isdir(self.config.CHECKPOINT_FOLDER):
             os.makedirs(self.config.CHECKPOINT_FOLDER)
-        self._setup_actor_critic_agent(ppo_cfg)
+        self._setup_actor_critic_agent(sac_cfg)
         logger.info(
             "agent number of parameters: {}".format(
                 sum(param.numel() for param in self.agent.parameters())
@@ -290,11 +296,11 @@ class SACTrainer(BaseRLTrainer):
         )
 
         rollouts = RolloutStorage(
-            ppo_cfg.num_steps,
+            sac_cfg.num_steps,
             self.envs.num_envs,
             self.envs.observation_spaces[0],
             self.envs.action_spaces[0],
-            ppo_cfg.hidden_size,
+            sac_cfg.hidden_size,
         )
         rollouts.to(self.device)
 
@@ -316,7 +322,7 @@ class SACTrainer(BaseRLTrainer):
             reward=torch.zeros(self.envs.num_envs, 1),
         )
         window_episode_stats = defaultdict(
-            lambda: deque(maxlen=ppo_cfg.reward_window_size)
+            lambda: deque(maxlen=sac_cfg.reward_window_size)
         )
 
         t_start = time.time()
@@ -326,7 +332,21 @@ class SACTrainer(BaseRLTrainer):
         count_checkpoints = 0
 
         lr_scheduler = LambdaLR(
-            optimizer=self.agent.optimizer,
+            optimizer=self.agent.actor_optimizer,
+            lr_lambda=lambda x: linear_decay(x, self.config.NUM_UPDATES),
+        )
+
+        lr_scheduler_2 = LambdaLR(
+            optimizer=self.agent.local_1_optimizer,
+            lr_lambda=lambda x: linear_decay(x, self.config.NUM_UPDATES),
+        )
+
+        lr_scheduler_3 = LambdaLR(
+            optimizer=self.agent.local_2_optimizer,
+            lr_lambda=lambda x: linear_decay(x, self.config.NUM_UPDATES),
+        )
+        lr_scheduler_4 = LambdaLR(
+            optimizer=self.agent.alpha_optim,
             lr_lambda=lambda x: linear_decay(x, self.config.NUM_UPDATES),
         )
 
@@ -334,15 +354,18 @@ class SACTrainer(BaseRLTrainer):
             self.config.TENSORBOARD_DIR, flush_secs=self.flush_secs
         ) as writer:
             for update in range(self.config.NUM_UPDATES):
-                if ppo_cfg.use_linear_lr_decay:
+                if sac_cfg.use_linear_lr_decay:
                     lr_scheduler.step()
+                    lr_scheduler_2.step()
+                    lr_scheduler_3.step()
+                    lr_scheduler_4.step()
 
-                if ppo_cfg.use_linear_clip_decay:
-                    self.agent.clip_param = ppo_cfg.clip_param * linear_decay(
+                if sac_cfg.use_linear_clip_decay:
+                    self.agent.clip_param = sac_cfg.clip_param * linear_decay(
                         update, self.config.NUM_UPDATES
                     )
 
-                for step in range(ppo_cfg.num_steps):
+                for step in range(sac_cfg.num_steps):
                     (
                         delta_pth_time,
                         delta_env_time,
@@ -359,7 +382,7 @@ class SACTrainer(BaseRLTrainer):
                     value_loss,
                     action_loss,
                     dist_entropy,
-                ) = self._update_agent(ppo_cfg, rollouts)
+                ) = self._update_agent(sac_cfg, rollouts)
                 pth_time += delta_pth_time
 
                 for k, v in running_episode_stats.items():
@@ -455,7 +478,7 @@ class SACTrainer(BaseRLTrainer):
         else:
             config = self.config.clone()
 
-        ppo_cfg = config.RL.SAC
+        sac_cfg = config.RL.SAC
 
         config.defrost()
         config.TASK_CONFIG.DATASET.SPLIT = config.EVAL.SPLIT
@@ -469,7 +492,7 @@ class SACTrainer(BaseRLTrainer):
 
         logger.info(f"env config: {config}")
         self.envs = construct_envs(config, get_env_class(config.ENV_NAME))
-        self._setup_actor_critic_agent(ppo_cfg)
+        self._setup_actor_critic_agent(sac_cfg)
 
         self.agent.load_state_dict(ckpt_dict["state_dict"])
         self.actor_critic = self.agent.actor_critic
@@ -484,7 +507,7 @@ class SACTrainer(BaseRLTrainer):
         test_recurrent_hidden_states = torch.zeros(
             self.actor_critic.net.num_recurrent_layers,
             self.config.NUM_PROCESSES,
-            ppo_cfg.hidden_size,
+            sac_cfg.hidden_size,
             device=self.device,
         )
         prev_actions = torch.zeros(

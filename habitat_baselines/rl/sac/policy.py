@@ -29,7 +29,7 @@ class Policy(nn.Module):
             self.net.output_size, self.dim_actions
         )
         self.critic = CriticHead(self.net.output_size)
-
+   
     def forward(self, *x):
         raise NotImplementedError
 
@@ -74,7 +74,10 @@ class Policy(nn.Module):
         action_log_probs = distribution.log_probs(action)
         distribution_entropy = distribution.entropy().mean()
 
-        return value, action_log_probs, distribution_entropy, rnn_hidden_states
+        return features, distribution.probs, torch.log(distribution.probs), distribution_entropy, rnn_hidden_states
+
+    def get_net(self):
+        return self.net
 
 
 class CriticHead(nn.Module):
@@ -192,3 +195,5 @@ class PointNavBaselineNet(Net):
         x, rnn_hidden_states = self.state_encoder(x, rnn_hidden_states, masks)
 
         return x, rnn_hidden_states
+
+        
