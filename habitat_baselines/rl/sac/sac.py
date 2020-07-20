@@ -107,7 +107,7 @@ class SAC(nn.Module):
         action_loss_epoch = 0
         dist_entropy_epoch = 0
 
-        for e in range(self.sac_epoch):
+        for e in range(1):
             data_generator = rollouts.recurrent_generator(
                 advantages, self.num_mini_batch
             )
@@ -125,6 +125,7 @@ class SAC(nn.Module):
                     old_action_log_probs_batch,
                     adv_targ,
                 ) = sample
+
 
                 # Reshape to do in a single forward pass for all steps
                 (
@@ -145,7 +146,7 @@ class SAC(nn.Module):
                 q_target_2 = self.critic_target_2(features)
                 q_next_target = action_probs*(torch.min(q_target_1, q_target_2) - self.alpha*action_log_probs)
                 q_next_target = q_next_target.mean(dim=1).unsqueeze(-1)
-                next_q_value = return_batch + self.gamma*q_next_target
+                next_q_value = return_batch + masks_batch*self.gamma*q_next_target
 
                 q_local_1 = self.critic_local_1(features)
                 q_local_2 = self.critic_local_2(features)
@@ -156,9 +157,10 @@ class SAC(nn.Module):
                 
                 min_q_local = torch.min(q_local_1, q_local_1)
                 loss_policy = action_probs*(-min_q_local + self.alpha*action_log_probs)
-                loss_policy = loss_policy.mean()
+                loss_policy = loss_policy.mean()   
 
-                loss_alpha = -(self.log_alpha*(action_log_probs + self.target_entropy).detach()).mean()
+                entropy = torch.sum(action_log_probs * action_probs, dim=1)
+                loss_alpha = -(self.log_alpha*(entropy + self.target_entropy).detach()).mean() 
 
 
                 ##TO:DO make a function to call optimizers given params
@@ -183,6 +185,8 @@ class SAC(nn.Module):
                 self.alpha_optim.step()
                 self.alpha = self.log_alpha.exp()
 
+                print("some test_results", loss_alpha, loss_policy, loss_local_1, loss_local_2, alpha)
+
                 value_loss_epoch += loss_local_1.item()
                 action_loss_epoch += loss_policy.item()
                 dist_entropy_epoch += dist_entropy.item()
@@ -190,7 +194,7 @@ class SAC(nn.Module):
                 self.soft_update_of_target_network(self.critic_local_1, self.critic_target_1)
                 self.soft_update_of_target_network(self.critic_local_2, self.critic_target_2)
 
-        num_updates = self.sac_epoch * self.num_mini_batch
+        num_updates = self.num_mini_batch
 
         value_loss_epoch /= num_updates
         action_loss_epoch /= num_updates

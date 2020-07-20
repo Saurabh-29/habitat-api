@@ -79,7 +79,7 @@ _C.RL.PPO.hidden_size = 512
 #-----------------------------------------------------------------------------
 _C.RL.SAC = CN()
 _C.RL.SAC.clip_param = 0.2
-_C.RL.SAC.sac_epoch = 4
+_C.RL.SAC.sac_epoch = 1
 _C.RL.SAC.num_mini_batch = 16
 _C.RL.SAC.value_loss_coef = 0.5
 _C.RL.SAC.entropy_coef = 0.01

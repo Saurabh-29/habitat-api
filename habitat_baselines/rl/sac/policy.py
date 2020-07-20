@@ -33,6 +33,7 @@ class Policy(nn.Module):
     def forward(self, *x):
         raise NotImplementedError
 
+
     def act(
         self,
         observations,
@@ -71,10 +72,14 @@ class Policy(nn.Module):
         distribution = self.action_distribution(features)
         value = self.critic(features)
 
-        action_log_probs = distribution.log_probs(action)
+        #action_log_probs = distribution.log_probs(action)
         distribution_entropy = distribution.entropy().mean()
+        action_probs = distribution.probs
+        z = action_probs == 0.0
+        z = z.float() * 1e-8
+        log_action_probs = torch.log(action_probs + z)
 
-        return features, distribution.probs, torch.log(distribution.probs), distribution_entropy, rnn_hidden_states
+        return features, action_probs, log_action_probs, distribution_entropy, rnn_hidden_states
 
     def get_net(self):
         return self.net
